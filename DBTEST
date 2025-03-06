@@ -1,0 +1,165 @@
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
+import mysql.connector
+from mysql.connector import Error
+
+def test_connection():
+    """
+    入力された接続情報でMySQLへの接続をテストする。
+    成功すればメッセージボックスで通知し、失敗すればエラーメッセージを表示する。
+    """
+    host = entry_host.get()
+    database = entry_database.get()
+    user = entry_user.get()
+    password = entry_password.get()
+
+    try:
+        connection = mysql.connector.connect(
+            host=host,
+            database=database,
+            user=user,
+            password=password
+        )
+        if connection.is_connected():
+            messagebox.showinfo("接続テスト", "MySQLへの接続に成功しました。")
+    except Error as e:
+        messagebox.showerror("接続テストエラー", f"接続に失敗しました: {e}")
+    finally:
+        if 'connection' in locals() and connection.is_connected():
+            connection.close()
+
+def execute_query():
+    """
+    入力されたSQL文を実行し、結果を出力エリアに表示する。
+    SELECT文の場合は結果セットを、その他の文の場合は実行結果（影響行数）を表示する。
+    """
+    # 接続情報とSQL文の取得
+    host = entry_host.get()
+    database = entry_database.get()
+    user = entry_user.get()
+    password = entry_password.get()
+    sql_query = sql_text.get("1.0", tk.END).strip()  # テキストエリアの内容を取得
+
+    if not sql_query:
+        messagebox.showwarning("入力エラー", "SQL文を入力してください。")
+        return
+
+    # 出力エリアの初期化
+    output_text.delete("1.0", tk.END)
+
+    try:
+        # MySQLへの接続
+        connection = mysql.connector.connect(
+            host=host,
+            database=database,
+            user=user,
+            password=password
+        )
+        if connection.is_connected():
+            cursor = connection.cursor()
+            # SQL文の実行
+            cursor.execute(sql_query)
+
+            # SELECT文の場合は結果セットを取得して表示
+            if sql_query.lstrip().upper().startswith("SELECT"):
+                rows = cursor.fetchall()
+                # カラム名の取得（利用可能な場合）
+                columns = cursor.column_names
+                output_text.insert(tk.END, "\t".join(columns) + "\n")
+                output_text.insert(tk.END, "-" * 50 + "\n")
+                for row in rows:
+                    row_str = "\t".join(str(col) for col in row)
+                    output_text.insert(tk.END, row_str + "\n")
+            else:
+                # SELECT以外の場合はコミット（INSERT, UPDATE, DELETE等）
+                connection.commit()
+                affected = cursor.rowcount
+                output_text.insert(tk.END, f"SQL文が正常に実行されました。\n影響を受けた行数: {affected}")
+    except Error as e:
+        messagebox.showerror("エラー", f"エラーが発生しました: {e}")
+    finally:
+        if 'connection' in locals() and connection.is_connected():
+            cursor.close()
+            connection.close()
+            output_text.insert(tk.END, "\nMySQLの接続をクローズしました。\n")
+
+# --- サンプルSQLを入力する関数群 ---
+def insert_sample_select():
+    sql_text.delete("1.0", tk.END)
+    sql_text.insert(tk.END, "SELECT * FROM your_table;")
+
+def insert_sample_update():
+    sql_text.delete("1.0", tk.END)
+    sql_text.insert(tk.END, "UPDATE your_table SET column_name = 'new_value' WHERE condition;")
+
+def insert_sample_insert():
+    sql_text.delete("1.0", tk.END)
+    sql_text.insert(tk.END, "INSERT INTO your_table (column1, column2) VALUES ('value1', 'value2');")
+
+def insert_sample_delete():
+    sql_text.delete("1.0", tk.END)
+    sql_text.insert(tk.END, "DELETE FROM your_table WHERE condition;")
+
+# --- メインウィンドウの作成 ---
+root = tk.Tk()
+root.title("MySQL SQL実行GUIツール")
+
+# --- 接続情報入力エリア ---
+frame_conn = tk.Frame(root)
+frame_conn.pack(padx=10, pady=10, anchor="w")
+
+tk.Label(frame_conn, text="Host:").grid(row=0, column=0, sticky="e")
+entry_host = tk.Entry(frame_conn)
+entry_host.insert(0, "localhost")  # デフォルト値
+entry_host.grid(row=0, column=1, padx=5, pady=2)
+
+tk.Label(frame_conn, text="Database:").grid(row=1, column=0, sticky="e")
+entry_database = tk.Entry(frame_conn)
+entry_database.grid(row=1, column=1, padx=5, pady=2)
+
+tk.Label(frame_conn, text="User:").grid(row=2, column=0, sticky="e")
+entry_user = tk.Entry(frame_conn)
+entry_user.grid(row=2, column=1, padx=5, pady=2)
+
+tk.Label(frame_conn, text="Password:").grid(row=3, column=0, sticky="e")
+entry_password = tk.Entry(frame_conn, show="*")
+entry_password.grid(row=3, column=1, padx=5, pady=2)
+
+# --- 接続テストボタン ---
+button_test = tk.Button(frame_conn, text="接続テスト", command=test_connection)
+button_test.grid(row=4, column=0, columnspan=2, pady=5)
+
+# --- SQL入力エリア ---
+frame_sql = tk.Frame(root)
+frame_sql.pack(padx=10, pady=5, fill="both", expand=True)
+
+tk.Label(frame_sql, text="SQL文:").pack(anchor="w")
+sql_text = scrolledtext.ScrolledText(frame_sql, height=5)
+sql_text.pack(fill="both", expand=True)
+
+# --- サンプルSQL出力ボタン群 ---
+frame_sample = tk.Frame(root)
+frame_sample.pack(padx=10, pady=5)
+
+button_select = tk.Button(frame_sample, text="SELECT", width=10, command=insert_sample_select)
+button_select.grid(row=0, column=0, padx=5, pady=2)
+
+button_update = tk.Button(frame_sample, text="UPDATE", width=10, command=insert_sample_update)
+button_update.grid(row=0, column=1, padx=5, pady=2)
+
+button_insert = tk.Button(frame_sample, text="INSERT", width=10, command=insert_sample_insert)
+button_insert.grid(row=0, column=2, padx=5, pady=2)
+
+button_delete = tk.Button(frame_sample, text="DELETE", width=10, command=insert_sample_delete)
+button_delete.grid(row=0, column=3, padx=5, pady=2)
+
+# --- SQL実行ボタン ---
+button_execute = tk.Button(root, text="SQL実行", command=execute_query)
+button_execute.pack(pady=5)
+
+# --- 結果出力エリア ---
+output_text = scrolledtext.ScrolledText(root, height=15, width=80)
+output_text.pack(padx=10, pady=10, fill="both", expand=True)
+
+# --- メインループ開始 ---
+root.mainloop()
